@@ -36,6 +36,26 @@ inputs:
     description: "Pull request URL. When set, it is added to the LAVA job metadata as PR_URL"
     required: false
     default: ""
+  distro:
+    description: "Distro name without the kernel suffix. Added to the LAVA job metadata"
+    required: false
+    default: ""
+  kernel_name:
+    description: "Kernel variant built into the image, given as the distro suffix used by the build. Added to the LAVA job metadata"
+    required: false
+    default: ""
+  source_sha:
+    description: "Commit of this repository the build under test was made from. Added to the LAVA job metadata"
+    required: false
+    default: ""
+  source_branch:
+    description: "Branch that commit came from. Added to the LAVA job metadata"
+    required: false
+    default: ""
+  build_type:
+    description: "PR, PUSH, NIGHTLY or WEEKLY. Matches the buildType tag set on the build's S3 objects"
+    required: false
+    default: ""
 
 outputs:
   jobmatrix:
@@ -78,6 +98,13 @@ runs:
           INPUTS_TESTKIT_REF: ${{ inputs.testkit_ref }}
           INPUTS_PR_NUMBER: ${{ inputs.pr_number }}
           INPUTS_PR_URL: ${{ inputs.pr_url }}
+          INPUTS_REF: ${{ inputs.ref }}
+          INPUTS_BUILD_ID: ${{ inputs.build_id }}
+          INPUTS_DISTRO: ${{ inputs.distro }}
+          INPUTS_KERNEL_NAME: ${{ inputs.kernel_name }}
+          INPUTS_SOURCE_SHA: ${{ inputs.source_sha }}
+          INPUTS_SOURCE_BRANCH: ${{ inputs.source_branch }}
+          INPUTS_BUILD_TYPE: ${{ inputs.build_type }}
         run: |
           set -euo pipefail
           cd lava-test-plans && pip install .
@@ -119,6 +146,25 @@ runs:
           echo "GITHUB_WORKFLOW_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "${VARS_OUT_PATH}/gh-variables.ini"
           echo "GITHUB_WORKFLOW_RUN_ID=${GITHUB_RUN_ID}" >> "${VARS_OUT_PATH}/gh-variables.ini"
           echo "GITHUB_WORKFLOW_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          # Provenance of the build under test. LAVA keeps the job metadata in
+          # an indexed JSON field and exposes it as a query filter, so these
+          # are the keys a job gets selected by: which commit it came from and
+          # which configuration it was built with. Without them a job can only
+          # be traced through its free-form name, which cannot be queried.
+          echo "BUILD_TYPE=${INPUTS_BUILD_TYPE}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          echo "BUILD_RUN_ID=${INPUTS_BUILD_ID}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          echo "SOURCE_REPO=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          echo "SOURCE_BRANCH=${INPUTS_SOURCE_BRANCH}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          echo "SOURCE_SHA=${INPUTS_SOURCE_SHA}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          echo "TESTPLAN_NAME=${INPUTS_TESTPLAN}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          echo "LAVA_TEST_PLANS_REF=${INPUTS_REF}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          # distro_name carries the kernel suffix ("qcom-distro_linux-qcom-6.18"),
+          # so record the distro and the kernel separately. An empty suffix means
+          # the distro's default kernel: name it rather than leaving the key
+          # empty, so those builds can be selected by it as well.
+          echo "BUILD_DISTRO=${INPUTS_DISTRO:-${INPUTS_DISTRO_NAME}}" >> "${VARS_OUT_PATH}/gh-variables.ini"
+          BUILD_KERNEL="${INPUTS_KERNEL_NAME#_}"
+          echo "BUILD_KERNEL=${BUILD_KERNEL:-default}" >> "${VARS_OUT_PATH}/gh-variables.ini"
           IMAGE_TYPE="core-image-base"
           case "${INPUTS_DISTRO_NAME}" in
             "qcom-distro"*)
@@ -127,6 +173,7 @@ runs:
               echo "AUTO_LOGIN_PASSWORD=oelinux123" >> "${VARS_OUT_PATH}/gh-variables.ini"
               ;;
           esac
+          echo "BUILD_IMAGE=${IMAGE_TYPE}" >> "${VARS_OUT_PATH}/gh-variables.ini"
 
           RESULT_JSON='{"target": []}'
           for machine in ${INPUTS_MACHINES//,/ }; do

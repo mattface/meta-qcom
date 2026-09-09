@@ -44,6 +44,18 @@ on:
         required: false
         type: string
         description: "Pull request URL. Added to the LAVA job metadata for PR builds"
+      source_sha:
+        required: false
+        type: string
+        description: "Commit of this repository the build under test was made from. Added to the LAVA job metadata"
+      source_branch:
+        required: false
+        type: string
+        description: "Branch that commit came from. Added to the LAVA job metadata"
+      build_type:
+        required: false
+        type: string
+        description: "PR, PUSH, NIGHTLY or WEEKLY. Added to the LAVA job metadata"
     outputs:
       summary_id:
         description: "ID of the test summary artifact"
@@ -81,6 +93,11 @@ jobs:
           testkit_ref: ${{ inputs.testkit_ref }}
           pr_number: ${{ inputs.pr_number }}
           pr_url: ${{ inputs.pr_url }}
+          distro: ${{ inputs.distro_name }}
+          kernel_name: ${{ inputs.distro_suffix }}
+          source_sha: ${{ inputs.source_sha }}
+          source_branch: ${{ inputs.source_branch }}
+          build_type: ${{ inputs.build_type }}
 
       - name: Print output ID
         env:
@@ -208,6 +225,11 @@ jobs:
           testkit_ref: ${{ inputs.testkit_ref }}
           pr_number: ${{ inputs.pr_number }}
           pr_url: ${{ inputs.pr_url }}
+          distro: ${{ inputs.distro_name }}
+          kernel_name: ${{ inputs.distro_suffix }}
+          source_sha: ${{ inputs.source_sha }}
+          source_branch: ${{ inputs.source_branch }}
+          build_type: ${{ inputs.build_type }}
 
       - name: Print output ID
         env:

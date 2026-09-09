@@ -37,9 +37,56 @@ jobs:
         shell: bash
         run: |
           echo "lava-test-plans ref: ${{ env.LAVA_TEST_PLANS_REF }}"
+      - name: "Resolve the commit under test"
+        id: source
+        shell: bash
+        env:
+          EVENT_NAME: "${{ github.event_name }}"
+          WORKFLOW_NAME: "${{ github.workflow }}"
+          RUN_HEAD_SHA: "${{ github.event.workflow_run.head_sha }}"
+          RUN_HEAD_BRANCH: "${{ github.event.workflow_run.head_branch }}"
+          SHA: "${{ github.sha }}"
+          REF_NAME: "${{ github.ref_name }}"
+        run: |
+          set -euo pipefail
+          case "${EVENT_NAME}" in
+            workflow_run)
+              # PR builds reach this workflow through workflow_run, which runs
+              # in the base context: github.sha is the target branch, not the
+              # commit that was built. The build's own run carries that.
+              SOURCE_SHA="${RUN_HEAD_SHA}"
+              SOURCE_BRANCH="${RUN_HEAD_BRANCH}"
+              BUILD_TYPE="PR"
+              ;;
+            push)
+              SOURCE_SHA="${SHA}"
+              SOURCE_BRANCH="${REF_NAME}"
+              BUILD_TYPE="PUSH"
+              ;;
+            *)
+              # Scheduled and manually dispatched runs, told apart by the name
+              # of the workflow that called this one. Same vocabulary as the
+              # buildType tag compile.yml puts on the build's S3 objects.
+              SOURCE_SHA="${SHA}"
+              SOURCE_BRANCH="${REF_NAME}"
+              case "${WORKFLOW_NAME}" in
+                *Weekly*) BUILD_TYPE="WEEKLY" ;;
+                *Nightly*) BUILD_TYPE="NIGHTLY" ;;
+                *) BUILD_TYPE="OTHER" ;;
+              esac
+              ;;
+          esac
+          {
+            echo "source-sha=${SOURCE_SHA}"
+            echo "source-branch=${SOURCE_BRANCH}"
+            echo "build-type=${BUILD_TYPE}"
+          } >> "$GITHUB_OUTPUT"
     outputs:
       lava-test-plans-ref: "${{ env.LAVA_TEST_PLANS_REF }}"
       testkit-ref: "${{ env.TESTKIT_REF }}"
+      source-sha: "${{ steps.source.outputs.source-sha }}"
+      source-branch: "${{ steps.source.outputs.source-branch }}"
+      build-type: "${{ steps.source.outputs.build-type }}"
   test-nodistro:
     needs: [prepare-env]
     name: "Test nodistro"
@@ -55,6 +102,9 @@ jobs:
       testkit_ref: "${{ needs.prepare-env.outputs.testkit-ref }}"
       pr_number: "${{ inputs.pr_number }}"
       pr_url: "${{ inputs.pr_url }}"
+      source_sha: "${{ needs.prepare-env.outputs.source-sha }}"
+      source_branch: "${{ needs.prepare-env.outputs.source-branch }}"
+      build_type: "${{ needs.prepare-env.outputs.build-type }}"
   test-qcom-distro:
     needs: [prepare-env]
     name: "Test qcom-distro"
@@ -71,6 +121,9 @@ jobs:
       testkit_ref: "${{ needs.prepare-env.outputs.testkit-ref }}"
       pr_number: "${{ inputs.pr_number }}"
       pr_url: "${{ inputs.pr_url }}"
+      source_sha: "${{ needs.prepare-env.outputs.source-sha }}"
+      source_branch: "${{ needs.prepare-env.outputs.source-branch }}"
+      build_type: "${{ needs.prepare-env.outputs.build-type }}"
   test-qcom-distro_linux-qcom-6-18:
     needs: [prepare-env]
     name: "Test qcom-distro_linux-qcom-6.18"
@@ -88,6 +141,9 @@ jobs:
       testkit_ref: "${{ needs.prepare-env.outputs.testkit-ref }}"
       pr_number: "${{ inputs.pr_number }}"
       pr_url: "${{ inputs.pr_url }}"
+      source_sha: "${{ needs.prepare-env.outputs.source-sha }}"
+      source_branch: "${{ needs.prepare-env.outputs.source-branch }}"
+      build_type: "${{ needs.prepare-env.outputs.build-type }}"
 
   collect-ids:
     name: "Collect Summary artifact IDs"
